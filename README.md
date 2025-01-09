@@ -167,7 +167,7 @@ deploy-staging:
     # Deploy with kubeconfig
     - export KUBECONFIG=kubeconfig.yaml
     - kubectl config use-context staging
-    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-staging:$CI_COMMIT_SHORT_SHA
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.domain.com/pgd-petrvs-publico-staging:$CI_COMMIT_SHORT_SHA
     - kubectl apply -f k8s/staging/deployment.yaml
     - kubectl apply -f k8s/staging/service.yaml
   environment:
@@ -193,7 +193,7 @@ deploy-production:
     # Deploy com kubeconfig
     - export KUBECONFIG=kubeconfig.yaml
     - kubectl config use-context production
-    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-production:$CI_COMMIT_SHORT_SHA
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.domain.com/pgd-petrvs-publico-production:$CI_COMMIT_SHORT_SHA
     - kubectl apply -f k8s/production/deployment.yaml
     - kubectl apply -f k8s/production/service.yaml
   environment:

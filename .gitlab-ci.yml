@@ -13,11 +13,11 @@ stages:
 variables:
   DOCKER_DRIVER: overlay2
   DOCKER_HOST: tcp://docker:2375
-  IMAGE_NAME: dti-registro.unilab.edu.br/pgd-petrvs-publico
+  IMAGE_NAME: dti-registro.domain.com/pgd-petrvs-publico
 
 before_script:
   - echo "Logging into Harbor"
-  - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.unilab.edu.br
+  - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.domain.com
 
 plan:
   stage: plan
@@ -80,7 +80,7 @@ security-scan:
 push-image:
   stage: push
   script:
-    - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.unilab.edu.br
+    - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.domain.com
     - docker push "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
     - chmod +x scripts/minio-upload.sh
     - ./scripts/minio-upload.sh
@@ -98,7 +98,7 @@ deploy-staging:
     # deploy with kubeconfig
     - export KUBECONFIG=kubeconfig.yaml
     - kubectl config use-context staging
-    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-staging:$CI_COMMIT_SHORT_SHA
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.domain.com/pgd-petrvs-publico-staging:$CI_COMMIT_SHORT_SHA
     - kubectl apply -f k8s/staging/deployment.yaml
     - kubectl apply -f k8s/staging/service.yaml
   environment:
@@ -117,7 +117,7 @@ deploy-production:
     # deploy com kubeconfig
     - export KUBECONFIG=kubeconfig.yaml
     - kubectl config use-context production
-    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-production:$CI_COMMIT_SHORT_SHA
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.domain.com/pgd-petrvs-publico-production:$CI_COMMIT_SHORT_SHA
     - kubectl apply -f k8s/production/deployment.yaml
     - kubectl apply -f k8s/production/service.yaml
   environment:
