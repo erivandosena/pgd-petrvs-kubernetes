@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgd-petrvs-production
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pgd-petrvs
+  template:
+    metadata:
+      labels:
+        app: pgd-petrvs
+    spec:
+      containers:
+      - name: pgd-petrvs
+        image: dti-registro.domain.com/pgd-petrvs-publico:$CI_COMMIT_SHORT_SHA
+        ports:
+        - containerPort: 80
+        env:
+        - name: VAULT_ADDR
+          value: "https://dti-vault.domain.com"
+        - name: MINIO_URL
+          value: "https://s3-api.domain.com"
+        - name: MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: access-key
+        - name: MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: secret-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgd-petrvs-production
+  namespace: production
+spec:
+  selector:
+    app: pgd-petrvs
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
