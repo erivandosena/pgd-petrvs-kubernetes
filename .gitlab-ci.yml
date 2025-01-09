@@ -1,0 +1,131 @@
+stages:
+  - plan
+  - create
+  - build
+  - test
+  - quality
+  - secure
+  - push
+  - deploy-staging
+  - deploy-production
+  - monitor
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2375
+  IMAGE_NAME: dti-registro.unilab.edu.br/pgd-petrvs-publico
+
+before_script:
+  - echo "Logging into Harbor"
+  - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.unilab.edu.br
+
+plan:
+  stage: plan
+  script:
+    - chmod +x scripts/configure-vault.sh
+    - ./scripts/configure-vault.sh
+    - echo "Validating project dependencies..."
+    - echo "Dependencies are up to date."
+
+create:
+  stage: create
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash git
+  script:
+    - chmod +x scripts/fetch-source-code.sh
+    - ./scripts/fetch-source-code.sh
+
+build-production:
+  stage: build
+  image: docker:20.10
+  services:
+    - docker:20.10-dind
+  script:
+    - docker build -t "$IMAGE_NAME-production:$CI_COMMIT_SHORT_SHA" -f src/resources/docker/producao/Dockerfile-php .
+    - docker push "$IMAGE_NAME-production:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE_NAME-production:latest"
+
+build-staging:
+  stage: build
+  image: docker:20.10
+  services:
+    - docker:20.10-dind
+  script:
+    - docker build -t "$IMAGE_NAME-staging:$CI_COMMIT_SHORT_SHA" -f src/resources/docker/dev/Dockerfile-php .
+    - docker push "$IMAGE_NAME-staging:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE_NAME-staging:latest"
+
+sonarqube:
+  stage: quality
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - apk add --no-cache curl bash
+    - curl -fsSLk https://deb.nodesource.com/setup_18.x | bash -
+    - apk add --no-cache nodejs
+    - sonar-scanner \
+      -Dsonar.projectKey=$SONAR_PROJECT_KEY \
+      -Dsonar.sources=./src \
+      -Dsonar.exclusions="**/vendor/**, ./config/**" \
+      -Dsonar.language=php \
+      -Dsonar.sourceEncoding=UTF-8 \
+      -Dsonar.coverage.exclusions="**/vendor/**, ./config/**"
+
+security-scan:
+  stage: secure
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --severity HIGH,CRITICAL "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
+
+push-image:
+  stage: push
+  script:
+    - docker login -u "$HARBOR_USERNAME" -p "$HARBOR_PASSWORD" dti-registro.unilab.edu.br
+    - docker push "$IMAGE_NAME:$CI_COMMIT_SHORT_SHA"
+    - chmod +x scripts/minio-upload.sh
+    - ./scripts/minio-upload.sh
+
+deploy-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  script:
+    # agente GitLab para Kubernetes
+    - echo "Using GitLab Agent for Kubernetes"
+    - kubectl apply -f k8s/staging/deployment.yaml
+    - kubectl apply -f k8s/staging/service.yaml
+    # variáveis ​​protegidas por CI/CD do GitLab
+    - echo "$KUBECONFIG_CONTENT" > kubeconfig.yaml
+    # deploy with kubeconfig
+    - export KUBECONFIG=kubeconfig.yaml
+    - kubectl config use-context staging
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-staging:$CI_COMMIT_SHORT_SHA
+    - kubectl apply -f k8s/staging/deployment.yaml
+    - kubectl apply -f k8s/staging/service.yaml
+  environment:
+    name: staging
+
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  script:
+    # agente GitLab para Kubernetes
+    - echo "Using GitLab Agent for Kubernetes"
+    - kubectl apply -f k8s/production/deployment.yaml
+    - kubectl apply -f k8s/production/service.yaml
+    # variáveis ​​protegidas por CI/CD do GitLab
+    - echo "$KUBECONFIG_CONTENT" > kubeconfig.yaml
+    # deploy com kubeconfig
+    - export KUBECONFIG=kubeconfig.yaml
+    - kubectl config use-context production
+    - kubectl set image deployment/pgd-petrvs pgd-petrvs=dti-registro.unilab.edu.br/pgd-petrvs-publico-production:$CI_COMMIT_SHORT_SHA
+    - kubectl apply -f k8s/production/deployment.yaml
+    - kubectl apply -f k8s/production/service.yaml
+  environment:
+    name: production
+
+monitor-logs:
+  stage: monitor
+  image: grafana/loki:latest
+  script:
+    - echo "Integrating with Loki to collect logs"
+    - curl -X POST http://loki:3100/api/v1/push -d '{"streams": [{"stream": {"job": "pgd-petrvs"}, "values": [["'"$(date +%s%N)"'", "Pipeline completed for $CI_COMMIT_SHORT_SHA"]]}]}'
